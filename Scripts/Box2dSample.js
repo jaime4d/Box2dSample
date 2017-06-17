@@ -1,4 +1,149 @@
+var Wheel;
+(function (Wheel) {
+    var Scripts;
+    (function (Scripts) {
+        var WheelState;
+        (function (WheelState) {
+            WheelState[WheelState["Idle"] = 0] = "Idle";
+            WheelState[WheelState["Start"] = 1] = "Start";
+            WheelState[WheelState["AccelerateStart"] = 2] = "AccelerateStart";
+            WheelState[WheelState["AccelerateRunning"] = 3] = "AccelerateRunning";
+            WheelState[WheelState["SpinNormalStart"] = 4] = "SpinNormalStart";
+            WheelState[WheelState["SpinNormalRunning"] = 5] = "SpinNormalRunning";
+            WheelState[WheelState["DeccelerateStart"] = 6] = "DeccelerateStart";
+            WheelState[WheelState["DeccelerateRunning"] = 7] = "DeccelerateRunning";
+            WheelState[WheelState["StopStart"] = 8] = "StopStart";
+            WheelState[WheelState["StopRunning"] = 9] = "StopRunning";
+        })(WheelState || (WheelState = {}));
+        var WheelScript = (function () {
+            function WheelScript() {
+                this.TWO_PI = 2.0 * Math.PI;
+                this._confVelocity = Math.PI * 1.5;
+                this._confT1 = 0.5;
+                this._confT2 = 2.5;
+                this._confT3 = 0.5;
+                this._wheelState = WheelState.Idle;
+                this._isRunning = false;
+                this.resetState();
+            }
+            WheelScript.prototype.resetState = function () {
+                this._angle = 0.0;
+                this._velocity = 0.0;
+                this._acceleration = 0.0;
+            };
+            WheelScript.prototype.getAngle = function () {
+                return this._angle;
+            };
+            WheelScript.prototype.getVelocity = function () {
+                return this._velocity;
+            };
+            Object.defineProperty(WheelScript.prototype, "isRunning", {
+                get: function () {
+                    return this._isRunning;
+                },
+                enumerable: true,
+                configurable: true
+            });
+            WheelScript.prototype.start = function (stopAtAngle) {
+                if (this._wheelState != WheelState.Idle) {
+                    console.error("Wheel is running!");
+                    return;
+                }
+                this._isRunning = true;
+                this._stopAtAngle = stopAtAngle;
+                this._wheelState = WheelState.Start;
+            };
+            WheelScript.prototype.update = function (dt) {
+                if (!this._isRunning)
+                    return;
+                this._d0 = (this._velocity * dt); // every step advances about 3 degrees
+                this._angle = (this._angle + this._d0) % this.TWO_PI;
+                this._velocity += this._acceleration * dt;
+                switch (this._wheelState) {
+                    case WheelState.Idle:
+                        break;
+                    case WheelState.Start:
+                        this._wheelState = WheelState.AccelerateStart;
+                        console.info("==>");
+                        console.info("Starting from angle: " + this._angle + ", stopping at: " + this._stopAtAngle);
+                        break;
+                    case WheelState.AccelerateStart:
+                        this._runningTime = 0.0;
+                        this._acceleration = this._confVelocity / this._confT1;
+                        this._wheelState = WheelState.AccelerateRunning;
+                        break;
+                    case WheelState.AccelerateRunning:
+                        this._runningTime += dt;
+                        if (this._velocity >= this._confVelocity) {
+                            this._acceleration = 0.0;
+                            this._wheelState = WheelState.SpinNormalStart;
+                        }
+                        break;
+                    case WheelState.SpinNormalStart:
+                        this._runningTime = 0.0;
+                        this._wheelState = WheelState.SpinNormalRunning;
+                        break;
+                    case WheelState.SpinNormalRunning:
+                        this._runningTime += dt;
+                        if (this._runningTime >= this._confT2) {
+                            this._d0Step = this._d0;
+                            console.log("preparing to deccelerate, step angle: " + this._d0Step * (180.0 / Math.PI));
+                            this._acceleration = 0.0;
+                            this._wheelState = WheelState.DeccelerateStart;
+                        }
+                        break;
+                    case WheelState.DeccelerateStart:
+                        this._runningTime = 0.0;
+                        this._displacement = 0.0;
+                        var d0 = (this._stopAtAngle - this._angle);
+                        if (d0 < 0)
+                            d0 = this.TWO_PI + d0;
+                        this._displacementToStop = d0 + this.TWO_PI;
+                        console.info("displacement to stop: " + this._displacementToStop);
+                        this._acceleration = 0; //
+                        this._wheelState = WheelState.DeccelerateRunning;
+                        break;
+                    case WheelState.DeccelerateRunning:
+                        this._runningTime += dt;
+                        this._displacement += (this._d0);
+                        if (this._displacement + this._d0Step >= this._displacementToStop) {
+                            // + this._d0Step because we want to be below target angle, not over.
+                            // this way, we can just translate to the correct angle without showing
+                            // visual artifacts.
+                            this._acceleration = 0.0;
+                            this._velocity = 0.0;
+                            this._wheelState = WheelState.StopStart;
+                        }
+                        break;
+                    case WheelState.StopStart:
+                        this._runningTime = 0.0;
+                        this._wheelState = WheelState.StopRunning;
+                        break;
+                    case WheelState.StopRunning:
+                        this._runningTime += dt;
+                        this._wheelState = WheelState.Idle;
+                        this._isRunning = false;
+                        var actualAngle = this._angle;
+                        var delta0 = (this._stopAtAngle - actualAngle) * (180.0 / Math.PI);
+                        console.info("*Stopped at rad: " + this._stopAtAngle + ", actual rad: " + actualAngle + " delta deg: " + delta0);
+                        if (Math.abs(delta0) > 2.0) {
+                            console.info("Sim landed " + ((delta0 < 0) ? "past" : "below") + " target");
+                        }
+                        else {
+                            console.info("Sim landed within threshold");
+                        }
+                        // we can just translate now if we have any remaining d0
+                        this._angle = this._stopAtAngle;
+                        break;
+                }
+            };
+            return WheelScript;
+        }());
+        Scripts.WheelScript = WheelScript;
+    })(Scripts = Wheel.Scripts || (Wheel.Scripts = {}));
+})(Wheel || (Wheel = {}));
 /// <reference path="scripts/typings/box2d/index.d.ts" />
+/// <reference path="wheelScript.ts" />
 var b2Vec2 = Box2D.Common.Math.b2Vec2;
 var b2BodyDef = Box2D.Dynamics.b2BodyDef;
 var b2Body = Box2D.Dynamics.b2Body;
@@ -16,6 +161,7 @@ var b2DistanceJoint = Box2D.Dynamics.Joints.b2DistanceJoint;
 var GameApp = (function () {
     function GameApp(canvas) {
         this._world = new Box2D.Dynamics.b2World(new Box2D.Common.Math.b2Vec2(0, 10), true);
+        this._wheel = new Wheel.Scripts.WheelScript();
         var debugDraw = new Box2D.Dynamics.b2DebugDraw();
         debugDraw.SetSprite(canvas.getContext("2d"));
         debugDraw.SetDrawScale(1.0);
@@ -133,27 +279,37 @@ var GameApp = (function () {
         ddef.Initialize(wheelRudder, wheelBaseBody, pivotA, pivotB);
         this._world.CreateJoint(ddef);
         // set wheel's angular velocity
-        this._wheelBody.SetAngularVelocity(1.5);
+        //this._wheelBody.SetAngularVelocity(1.5);
         // rotate the whole wheel body a bit
         wheelBaseBody.SetAngle(Math.PI / 4);
     };
     GameApp.prototype.update = function (dt) {
         // do simulation
+        this._wheel.update(dt);
+        if (this._wheel.isRunning) {
+            this._wheelBody.SetAngle(this._wheel.getAngle());
+        }
+        else {
+        }
         // step world
         this._world.Step(dt //frame-rate
-        , 10 //velocity iterations
-        , 10 //position iterations
+        , 2 //velocity iterations
+        , 2 //position iterations
         );
         this._world.DrawDebugData();
         this._world.ClearForces();
     };
     GameApp.prototype.onClick = function (e) {
+        /*
         if (this._wheelBody.GetAngularVelocity() > 0) {
             this._wheelBody.SetAngularVelocity(0);
-        }
-        else {
+        } else {
             this._wheelBody.SetAngularVelocity(1.5);
         }
+        
+        this._wheelBody.SetAwake(true);
+        */
+        this._wheel.start(Math.random() * Math.PI * 2.0);
         this._wheelBody.SetAwake(true);
     };
     return GameApp;
@@ -164,10 +320,10 @@ window.onload = function () {
     g_app = new GameApp(canvas);
     g_app.start();
     canvas.addEventListener("click", onClick, false);
-    window.setInterval(update, 1000 / 60);
+    window.setInterval(update, 1000.0 / 60.0);
 };
 function update() {
-    g_app.update(1 / 60);
+    g_app.update(1.0 / 60.0);
 }
 ;
 function onClick(e) {

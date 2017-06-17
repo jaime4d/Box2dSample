@@ -1,4 +1,5 @@
 ﻿/// <reference path="scripts/typings/box2d/index.d.ts" />
+/// <reference path="wheelScript.ts" />
 
 import b2Vec2 = Box2D.Common.Math.b2Vec2;
 import b2BodyDef = Box2D.Dynamics.b2BodyDef;
@@ -19,10 +20,12 @@ class GameApp {
 
     private _world: Box2D.Dynamics.b2World;
     private _wheelBody: b2Body;
+    private _wheel: Wheel.Scripts.WheelScript;
 
     constructor(canvas: HTMLCanvasElement) {
 
         this._world = new Box2D.Dynamics.b2World(new Box2D.Common.Math.b2Vec2(0, 10), true);
+        this._wheel = new Wheel.Scripts.WheelScript();
 
         let debugDraw = new Box2D.Dynamics.b2DebugDraw();
         debugDraw.SetSprite(canvas.getContext("2d"));
@@ -156,7 +159,7 @@ class GameApp {
         this._world.CreateJoint(ddef);
 
         // set wheel's angular velocity
-        this._wheelBody.SetAngularVelocity(1.5);
+        //this._wheelBody.SetAngularVelocity(1.5);
 
         // rotate the whole wheel body a bit
         wheelBaseBody.SetAngle(Math.PI / 4);
@@ -165,25 +168,36 @@ class GameApp {
     update(dt: number) {
 
         // do simulation
+        this._wheel.update(dt);
+
+        if (this._wheel.isRunning) {
+            this._wheelBody.SetAngle(this._wheel.getAngle());
+        } else {
+            //this._wheelBody.SetAngularVelocity(0.0);
+        }
 
         // step world
         this._world.Step(
-            dt         //frame-rate
-            , 10       //velocity iterations
-            , 10       //position iterations
+            dt        //frame-rate
+            , 2       //velocity iterations
+            , 2       //position iterations
         );
         this._world.DrawDebugData();
         this._world.ClearForces();
     }
 
     onClick(e: any) {
-
+        /*
         if (this._wheelBody.GetAngularVelocity() > 0) {
             this._wheelBody.SetAngularVelocity(0);
         } else {
             this._wheelBody.SetAngularVelocity(1.5);
         }
+        
+        this._wheelBody.SetAwake(true);
+        */
 
+        this._wheel.start(Math.random() * Math.PI * 2.0);
         this._wheelBody.SetAwake(true);
     }
 }
@@ -198,12 +212,12 @@ window.onload = () => {
 
     canvas.addEventListener("click", onClick, false);
 
-    window.setInterval(update, 1000 / 60);
+    window.setInterval(update, 1000.0 / 60.0);
 };
 
 function update() {
 
-    g_app.update(1/60);
+    g_app.update(1.0/60.0);
 };
 
 function onClick(e) {
