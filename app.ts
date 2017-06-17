@@ -158,9 +158,6 @@ class GameApp {
         ddef.Initialize(wheelRudder, wheelBaseBody, pivotA, pivotB);
         this._world.CreateJoint(ddef);
 
-        // set wheel's angular velocity
-        //this._wheelBody.SetAngularVelocity(1.5);
-
         // rotate the whole wheel body a bit
         wheelBaseBody.SetAngle(Math.PI / 4);
     }
@@ -170,11 +167,7 @@ class GameApp {
         // do simulation
         this._wheel.update(dt);
 
-        if (this._wheel.isRunning) {
-            this._wheelBody.SetAngle(this._wheel.getAngle());
-        } else {
-            //this._wheelBody.SetAngularVelocity(0.0);
-        }
+        this._wheelBody.SetAngle(this._wheel.getAngle());
 
         // step world
         this._world.Step(
