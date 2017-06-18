@@ -297,7 +297,7 @@ var GameApp = (function () {
         ddef.Initialize(this._wheelPointer, wheelBaseBody, pivotA, pivotB);
         this._world.CreateJoint(ddef);
         // rotate the whole wheel body a bit
-        wheelBaseBody.SetAngle(Math.PI / 4);
+        //wheelBaseBody.SetAngle(Math.PI / 4);
     };
     GameApp.prototype.update = function (dt) {
         // do simulation

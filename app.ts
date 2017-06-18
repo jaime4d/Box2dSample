@@ -161,7 +161,7 @@ class GameApp {
         this._world.CreateJoint(ddef);
 
         // rotate the whole wheel body a bit
-        wheelBaseBody.SetAngle(Math.PI / 4);
+        //wheelBaseBody.SetAngle(Math.PI / 4);
     }
 
     update(dt: number) {
