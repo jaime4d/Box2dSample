@@ -20,7 +20,9 @@ class GameApp {
 
     private _world: Box2D.Dynamics.b2World;
     private _wheelBody: b2Body;
+    private _wheelPointer: b2Body;
     private _wheel: Wheel.Scripts.WheelScript;
+    private _numSegments:number = 16;
 
     constructor(canvas: HTMLCanvasElement) {
 
@@ -104,13 +106,13 @@ class GameApp {
         this._world.CreateJoint(jdef);
 
         // wheel pegs
-        let numSegments = 16;
+       
         let fixturePeg: b2CircleShape;
         let radius = 5;
-        let d0 = Math.PI * 2 / numSegments;
-        for (let i = 0; i < numSegments; i++) {
+        let d0 = Math.PI * 2 / this._numSegments;
+        for (let i = 0; i < this._numSegments; i++) {
             fixturePeg = new b2CircleShape(radius);
-            let theta = d0 * i;
+            let theta = (d0 * i) + (d0/2.0);
             let pos = new b2Vec2();
             pos.x = wheelRadius * Math.cos(theta);
             pos.y = wheelRadius * Math.sin(theta);
@@ -118,7 +120,7 @@ class GameApp {
             this._wheelBody.CreateFixture2(fixturePeg);
         }
 
-        // ==wheel rudder==
+        // ==wheel pointer==
 
         bodyDef = new b2BodyDef();
         bodyDef.type = b2Body.b2_dynamicBody;
@@ -130,32 +132,32 @@ class GameApp {
         sh = new b2PolygonShape();
         sh.SetAsBox(2, 10);
         fixDef.shape = sh;
-        let wheelRudder = this._world.CreateBody(bodyDef);
-        wheelRudder.CreateFixture(fixDef);
+        this._wheelPointer = this._world.CreateBody(bodyDef);
+        this._wheelPointer.CreateFixture(fixDef);
 
-        // attaching rudder with wheel base with revolute joint
-        // this causes the rudder to rotate if the base is rotated.
+        // welding pointer and wheel base with revolute joint
+        // this causes the pointer to rotate if the base is rotated.
         jdef = new b2RevoluteJointDef();
-        let pivot = new b2Vec2(wheelRudder.GetWorldCenter().x, wheelRudder.GetWorldCenter().y - 4);
-        jdef.Initialize(wheelRudder, wheelBaseBody, pivot);
+        let pivot = new b2Vec2(this._wheelPointer.GetWorldCenter().x, this._wheelPointer.GetWorldCenter().y - 4);
+        jdef.Initialize(this._wheelPointer, wheelBaseBody, pivot);
         this._world.CreateJoint(jdef);
 
         // left spring-like joint
         let ddef = new b2DistanceJointDef();
         ddef.frequencyHz = 20;
         ddef.dampingRatio = 0.2;
-        let pivotA = new b2Vec2(wheelRudder.GetWorldCenter().x - 2, wheelRudder.GetWorldCenter().y - 4);
-        let pivotB = new b2Vec2(wheelRudder.GetWorldCenter().x - 15, wheelRudder.GetWorldCenter().y);
-        ddef.Initialize(wheelRudder, wheelBaseBody, pivotA, pivotB);
+        let pivotA = new b2Vec2(this._wheelPointer.GetWorldCenter().x - 2, this._wheelPointer.GetWorldCenter().y - 4);
+        let pivotB = new b2Vec2(this._wheelPointer.GetWorldCenter().x - 15, this._wheelPointer.GetWorldCenter().y);
+        ddef.Initialize(this._wheelPointer, wheelBaseBody, pivotA, pivotB);
         this._world.CreateJoint(ddef);
 
         // right spring-linke joint
         ddef = new b2DistanceJointDef();
         ddef.frequencyHz = 20;
         ddef.dampingRatio = 0.2;
-        pivotA = new b2Vec2(wheelRudder.GetWorldCenter().x + 2, wheelRudder.GetWorldCenter().y - 4);
-        pivotB = new b2Vec2(wheelRudder.GetWorldCenter().x + 15, wheelRudder.GetWorldCenter().y);
-        ddef.Initialize(wheelRudder, wheelBaseBody, pivotA, pivotB);
+        pivotA = new b2Vec2(this._wheelPointer.GetWorldCenter().x + 2, this._wheelPointer.GetWorldCenter().y - 4);
+        pivotB = new b2Vec2(this._wheelPointer.GetWorldCenter().x + 15, this._wheelPointer.GetWorldCenter().y);
+        ddef.Initialize(this._wheelPointer, wheelBaseBody, pivotA, pivotB);
         this._world.CreateJoint(ddef);
 
         // rotate the whole wheel body a bit
@@ -167,7 +169,11 @@ class GameApp {
         // do simulation
         this._wheel.update(dt);
 
-        this._wheelBody.SetAngle(this._wheel.getAngle());
+        if (this._wheel.isRunning) {
+            this._wheelBody.SetAngularVelocity(this._wheel.getVelocity());
+        } else {
+            this._wheelBody.SetAngle(this._wheel.getAngle());
+        }
 
         // step world
         this._world.Step(
@@ -180,17 +186,13 @@ class GameApp {
     }
 
     onClick(e: any) {
-        /*
-        if (this._wheelBody.GetAngularVelocity() > 0) {
-            this._wheelBody.SetAngularVelocity(0);
-        } else {
-            this._wheelBody.SetAngularVelocity(1.5);
-        }
-        
-        this._wheelBody.SetAwake(true);
-        */
-
-        this._wheel.start(Math.random() * Math.PI * 2.0);
+        // compute a random angle, but the angle must land in the middle of a wheel segment.
+        let rnd = Math.round(Math.random() * (this._numSegments)); // 0 - 15
+        let d0 = Math.PI * 2 / this._numSegments;
+        let angle = d0 * rnd;
+        // start spin simulation
+        this._wheel.start(angle);
+        // ensure wheel and pointer physics objects can rotate
         this._wheelBody.SetAwake(true);
     }
 }

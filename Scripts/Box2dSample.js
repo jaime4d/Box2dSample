@@ -119,7 +119,7 @@ var Wheel;
                         {
                             this._runningTime += dt;
                             this._displacement += (this._d0);
-                            if (this._displacement + this._d0Step >= this._displacementToStop) {
+                            if (this._velocity <= 0.0 /*this._displacement + this._d0Step >= this._displacementToStop*/) {
                                 // + this._d0Step because we want to be below target angle, not over.
                                 // this way, we can just translate to the correct angle without changing
                                 // spin direction. Doing so would cause a visual artifact.
@@ -178,6 +178,7 @@ var b2DistanceJointDef = Box2D.Dynamics.Joints.b2DistanceJointDef;
 var b2DistanceJoint = Box2D.Dynamics.Joints.b2DistanceJoint;
 var GameApp = (function () {
     function GameApp(canvas) {
+        this._numSegments = 16;
         this._world = new Box2D.Dynamics.b2World(new Box2D.Common.Math.b2Vec2(0, 10), true);
         this._wheel = new Wheel.Scripts.WheelScript();
         var debugDraw = new Box2D.Dynamics.b2DebugDraw();
@@ -248,20 +249,19 @@ var GameApp = (function () {
         jdef.bodyB = wheelBaseBody;
         this._world.CreateJoint(jdef);
         // wheel pegs
-        var numSegments = 16;
         var fixturePeg;
         var radius = 5;
-        var d0 = Math.PI * 2 / numSegments;
-        for (var i_1 = 0; i_1 < numSegments; i_1++) {
+        var d0 = Math.PI * 2 / this._numSegments;
+        for (var i_1 = 0; i_1 < this._numSegments; i_1++) {
             fixturePeg = new b2CircleShape(radius);
-            var theta = d0 * i_1;
+            var theta = (d0 * i_1) + (d0 / 2.0);
             var pos = new b2Vec2();
             pos.x = wheelRadius * Math.cos(theta);
             pos.y = wheelRadius * Math.sin(theta);
             fixturePeg.SetLocalPosition(pos);
             this._wheelBody.CreateFixture2(fixturePeg);
         }
-        // ==wheel rudder==
+        // ==wheel pointer==
         bodyDef = new b2BodyDef();
         bodyDef.type = b2Body.b2_dynamicBody;
         fixDef.density = 1.0;
@@ -272,29 +272,29 @@ var GameApp = (function () {
         sh = new b2PolygonShape();
         sh.SetAsBox(2, 10);
         fixDef.shape = sh;
-        var wheelRudder = this._world.CreateBody(bodyDef);
-        wheelRudder.CreateFixture(fixDef);
-        // attaching rudder with wheel base with revolute joint
-        // this causes the rudder to rotate if the base is rotated.
+        this._wheelPointer = this._world.CreateBody(bodyDef);
+        this._wheelPointer.CreateFixture(fixDef);
+        // welding pointer and wheel base with revolute joint
+        // this causes the pointer to rotate if the base is rotated.
         jdef = new b2RevoluteJointDef();
-        var pivot = new b2Vec2(wheelRudder.GetWorldCenter().x, wheelRudder.GetWorldCenter().y - 4);
-        jdef.Initialize(wheelRudder, wheelBaseBody, pivot);
+        var pivot = new b2Vec2(this._wheelPointer.GetWorldCenter().x, this._wheelPointer.GetWorldCenter().y - 4);
+        jdef.Initialize(this._wheelPointer, wheelBaseBody, pivot);
         this._world.CreateJoint(jdef);
         // left spring-like joint
         var ddef = new b2DistanceJointDef();
         ddef.frequencyHz = 20;
         ddef.dampingRatio = 0.2;
-        var pivotA = new b2Vec2(wheelRudder.GetWorldCenter().x - 2, wheelRudder.GetWorldCenter().y - 4);
-        var pivotB = new b2Vec2(wheelRudder.GetWorldCenter().x - 15, wheelRudder.GetWorldCenter().y);
-        ddef.Initialize(wheelRudder, wheelBaseBody, pivotA, pivotB);
+        var pivotA = new b2Vec2(this._wheelPointer.GetWorldCenter().x - 2, this._wheelPointer.GetWorldCenter().y - 4);
+        var pivotB = new b2Vec2(this._wheelPointer.GetWorldCenter().x - 15, this._wheelPointer.GetWorldCenter().y);
+        ddef.Initialize(this._wheelPointer, wheelBaseBody, pivotA, pivotB);
         this._world.CreateJoint(ddef);
         // right spring-linke joint
         ddef = new b2DistanceJointDef();
         ddef.frequencyHz = 20;
         ddef.dampingRatio = 0.2;
-        pivotA = new b2Vec2(wheelRudder.GetWorldCenter().x + 2, wheelRudder.GetWorldCenter().y - 4);
-        pivotB = new b2Vec2(wheelRudder.GetWorldCenter().x + 15, wheelRudder.GetWorldCenter().y);
-        ddef.Initialize(wheelRudder, wheelBaseBody, pivotA, pivotB);
+        pivotA = new b2Vec2(this._wheelPointer.GetWorldCenter().x + 2, this._wheelPointer.GetWorldCenter().y - 4);
+        pivotB = new b2Vec2(this._wheelPointer.GetWorldCenter().x + 15, this._wheelPointer.GetWorldCenter().y);
+        ddef.Initialize(this._wheelPointer, wheelBaseBody, pivotA, pivotB);
         this._world.CreateJoint(ddef);
         // rotate the whole wheel body a bit
         wheelBaseBody.SetAngle(Math.PI / 4);
@@ -302,7 +302,12 @@ var GameApp = (function () {
     GameApp.prototype.update = function (dt) {
         // do simulation
         this._wheel.update(dt);
-        this._wheelBody.SetAngle(this._wheel.getAngle());
+        if (this._wheel.isRunning) {
+            this._wheelBody.SetAngularVelocity(this._wheel.getVelocity());
+        }
+        else {
+            this._wheelBody.SetAngle(this._wheel.getAngle());
+        }
         // step world
         this._world.Step(dt //frame-rate
         , 2 //velocity iterations
@@ -312,16 +317,13 @@ var GameApp = (function () {
         this._world.ClearForces();
     };
     GameApp.prototype.onClick = function (e) {
-        /*
-        if (this._wheelBody.GetAngularVelocity() > 0) {
-            this._wheelBody.SetAngularVelocity(0);
-        } else {
-            this._wheelBody.SetAngularVelocity(1.5);
-        }
-        
-        this._wheelBody.SetAwake(true);
-        */
-        this._wheel.start(Math.random() * Math.PI * 2.0);
+        // compute a random angle, but the angle must land in the middle of a wheel segment.
+        var rnd = Math.round(Math.random() * (this._numSegments)); // 0 - 15
+        var d0 = Math.PI * 2 / this._numSegments;
+        var angle = d0 * rnd;
+        // start spin simulation
+        this._wheel.start(angle);
+        // ensure wheel and pointer physics objects can rotate
         this._wheelBody.SetAwake(true);
     };
     return GameApp;

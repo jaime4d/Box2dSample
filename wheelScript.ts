@@ -148,7 +148,7 @@ namespace Wheel.Scripts {
                         this._runningTime += dt;
                         this._displacement += (this._d0);
 
-                        if (this._displacement + this._d0Step >= this._displacementToStop) {
+                        if (this._velocity <= 0.0 /*this._displacement + this._d0Step >= this._displacementToStop*/) {
                             // + this._d0Step because we want to be below target angle, not over.
                             // this way, we can just translate to the correct angle without changing
                             // spin direction. Doing so would cause a visual artifact.
