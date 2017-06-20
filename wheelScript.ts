@@ -19,16 +19,14 @@ namespace Wheel.Scripts {
 
         private TWO_PI: number = 2.0 * Math.PI;
 
-        private _confVelocity: number = Math.PI * 1.5;
+        private _confVelocity: number = Math.PI * 2.0;
         private _confT1: number = 0.5;
         private _confT2: number = 2.5;
-        private _confT3: number = 1.0;
 
         private _isRunning: boolean;
         private _angle: number;
         private _velocity: number;
         private _d0: number;
-        private _d0Step: number;
         private _acceleration: number;
         private _runningTime: number;
         private _wheelState: WheelState;
@@ -120,8 +118,7 @@ namespace Wheel.Scripts {
                     {
                         this._runningTime += dt;
                         if (this._runningTime >= this._confT2) {
-                            this._d0Step = this._d0;
-                            console.log("preparing to deccelerate, step angle: " + this._d0Step * (180.0 / Math.PI));
+                            console.log("preparing to deccelerate, step angle: " + this._d0 * (180.0 / Math.PI));
                             this._acceleration = 0.0;
                             this._wheelState = WheelState.DeccelerateStart;
                         }
@@ -148,8 +145,8 @@ namespace Wheel.Scripts {
                         this._runningTime += dt;
                         this._displacement += (this._d0);
 
-                        if (this._velocity <= 0.0 /*this._displacement + this._d0Step >= this._displacementToStop*/) {
-                            // + this._d0Step because we want to be below target angle, not over.
+                        if (this._displacement + this._d0 >= this._displacementToStop) {
+                            // + this._d0 because we want to be below target angle, not over.
                             // this way, we can just translate to the correct angle without changing
                             // spin direction. Doing so would cause a visual artifact.
                             this._acceleration = 0.0;
@@ -163,24 +160,30 @@ namespace Wheel.Scripts {
                         let delta0 = (this._stopAtAngle - this._angle) * (180.0 / Math.PI);
                         console.info("*Stopped at rad: " + this._stopAtAngle + ", actual rad: " + this._angle + " delta deg: " + delta0 + " stopping time: " + this._runningTime);
 
+                        if (Math.abs(delta0) > 2.0) {
+                            console.info("Sim landed " + ((delta0 < 0) ? "past" : "below") + " target");
+                        } else {
+                            console.info("Sim landed within threshold");
+                        }
+
                         this._runningTime = 0.0;
                         this._wheelState = WheelState.StopRunning;
                     }
                     break;
                 case WheelState.StopRunning:
                     {
-                        this._isRunning = false;
                         this._runningTime += dt;
-                        this._wheelState = WheelState.Idle;
-
-                        let delta0 = (this._stopAtAngle - this._angle) * (180.0 / Math.PI);
-                        if (Math.abs(delta0) > 2.0) {
-                            console.info("Sim landed " + ((delta0 < 0) ? "past" : "below") + " target");
-                        } else {
-                            console.info("Sim landed within threshold");
+                        
+                        // we can just gradually translate to any remaining distance now
+                        this._velocity = dt;
+                        this._angle += dt;
+                        // we are done when we have gone past the landing angle
+                        if (this._angle > this._stopAtAngle) {
+                            this._velocity = 0.0;
+                            this._angle = this._stopAtAngle;
+                            this._wheelState = WheelState.Idle;
+                            this._isRunning = false;
                         }
-                        // we can just translate now if we have any remaining d0
-                        this._angle = this._stopAtAngle;
                     }
                     break;
             }
