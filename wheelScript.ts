@@ -79,8 +79,8 @@ namespace Wheel.Scripts {
 
             if (!this._isRunning) return;
 
-            this._d0 = (this._velocity * dt);
-            this._angle = (this._angle + this._d0 + 0.5 * this._acceleration * dt * dt) % this.TWO_PI;
+            this._d0 = (this._velocity * dt) + (0.5 * this._acceleration * dt * dt);
+            this._angle = (this._angle + this._d0) % this.TWO_PI;            
             this._velocity += this._acceleration * dt;
 
             switch (this._wheelState) {
@@ -119,15 +119,28 @@ namespace Wheel.Scripts {
                     {
                         this._runningTime += dt;
 
+                        // d0 = 0f - 0i
+                        // stopping distance = landing angle - initial angle
+                        // initial angle = landing angle - stopping distance
+                        // 0i = 0f - d0
                         let thetaInitial = (this._stopAtAngle - this._confStopDistance) % this.TWO_PI;
-                        if (thetaInitial < 0) thetaInitial += this.TWO_PI;
+                        if (thetaInitial < 0.0) thetaInitial += this.TWO_PI;
 
-                        let nextAngle = (this._angle + this._d0) % this.TWO_PI;
+                        // We start deccelerating when:
+                        // a) It is time to do so.
+                        // b) When the current angle is d0 away from the landing angle.
+                        //    That is, when the current angle is = 0i.
+                        let nextAngle = (this._angle + this._d0);
                         if (this._runningTime >= this._confConstantVelocityTime &&
                             nextAngle > thetaInitial &&
-                            this._angle <= thetaInitial) {
+                            this._angle <= thetaInitial + this._d0) {
+                            // On the current frame we are below 0i, and on the next
+                            // frame we would be over 0i or exactly on 0i. 
+                            // The check this._angle <= thetaInitial + this._d0, accounts
+                            // for when thetaInitial is zero.  this happens when this._confStopDistance is a 
+                            // multiple of 2*pi and the landing angle is zero or a multiple of 2*pi.
                             console.log("preparing to deccelerate from angle: " + this._angle);
-                            this._displacementToStop = this._confStopDistance;
+                            this._displacementToStop = this._confStopDistance + (thetaInitial - this._angle);
                             this._acceleration = 0.0;
                             this._wheelState = WheelState.DeccelerateStart;
                         }
@@ -138,6 +151,8 @@ namespace Wheel.Scripts {
                         this._runningTime = 0.0;
                         this._displacement = 0.0;
 
+                        this._displacementToStop -= this._d0; // we have already advanced by this._d0.
+
                         console.info("displacement to stop: " + this._displacementToStop);
                         this._acceleration = -(this._velocity * this._velocity) / (2.0 * this._displacementToStop);
 
@@ -147,9 +162,9 @@ namespace Wheel.Scripts {
                 case WheelState.DeccelerateRunning:
                     {
                         this._runningTime += dt;
-                        this._displacement += (this._d0);
+                        this._displacement += this._d0;
 
-                        let next = this._displacement + (this._velocity * dt) + (0.5 * this._acceleration * dt * dt);
+                        let next = this._displacement + this._d0;
                         if (next >= this._displacementToStop) {
                             // if on the next frame we are going to be on target or a bit over.
                             // we just want to make sure we translate by a delta amount that lands us
@@ -164,22 +179,22 @@ namespace Wheel.Scripts {
                     {                        
                         console.log("<<");
                         console.log("Stopped at angle: " + this._angle);
-                        console.log("Desired stop: " + this._stopAtAngle);
-                        console.log("Running time: " + this._runningTime);
+                        console.log("Desired landing angle: " + this._stopAtAngle);
+                        console.log("Landing running time: " + this._runningTime);
 
-                        let delta0 = this.toDeg(this._stopAtAngle - this._angle);
+                        let delta0 = this._stopAtAngle - this._angle;
                         if (delta0 > 0) {
-                            console.info("Sim landed before target");
+                            console.info("Sim landed before target, delta: " + delta0);
                         } else if (delta0 < 0) {
-                            console.info("Sim landed after target");
+                            console.info("Sim landed after target, delta: " + delta0);
                         } else {
-                            console.info("Sim landed ON target");
+                            console.info("Sim landed ON target, this is rare!");
                         }
 
-                        if (delta0 <= 2.0) {
+                        if (this.toDeg(delta0) <= 1.0) {
                             console.info("Sim landed within threshold");
                         } else {
-                            console.info("Sim landed outside threshold");
+                            console.warn("Sim landed outside threshold");
                         } 
 
                         this._runningTime = 0.0;

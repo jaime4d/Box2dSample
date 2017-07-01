@@ -186,10 +186,14 @@ class GameApp {
     }
 
     onClick(e: any) {
-        // compute a random angle, but the angle must land in the middle of a wheel segment.
-        let rnd = Math.round(Math.random() * (this._numSegments)); // 0 - 15
+        // get landing wheel segment: 0 - num segments - 1
+        //let rnd = Math.round(Math.random() * (this._numSegments));
+        let inputBox = document.getElementById("wheelSegment") as HTMLInputElement;
+        let wheelSegment = +inputBox.value;
+
+        // compute landing angle
         let d0 = Math.PI * 2 / this._numSegments;
-        let angle = d0 * rnd;
+        let angle = d0 * wheelSegment;
         // start spin simulation
         this._wheel.start(angle);
         // ensure wheel and pointer physics objects can rotate
