@@ -20,8 +20,9 @@ namespace Wheel.Scripts {
         private TWO_PI: number = 2.0 * Math.PI;
 
         private _confVelocity: number = Math.PI * 2.0;
-        private _confT1: number = 0.5;
-        private _confT2: number = 2.5;
+	    private _confStopDistance: number = this.TWO_PI * 2.0;
+        private _confAccelerationTime: number = 0.5;
+        private _confConstantVelocityTime: number = 2.5;
 
         private _isRunning: boolean;
         private _angle: number;
@@ -78,8 +79,8 @@ namespace Wheel.Scripts {
 
             if (!this._isRunning) return;
 
-            this._d0 = (this._velocity * dt); // every step advances about 3 degrees
-            this._angle = (this._angle + this._d0) % this.TWO_PI;
+            this._d0 = (this._velocity * dt);
+            this._angle = (this._angle + this._d0 + 0.5 * this._acceleration * dt * dt) % this.TWO_PI;
             this._velocity += this._acceleration * dt;
 
             switch (this._wheelState) {
@@ -95,7 +96,7 @@ namespace Wheel.Scripts {
                 case WheelState.AccelerateStart:
                     {
                         this._runningTime = 0.0;
-                        this._acceleration = this._confVelocity / this._confT1;
+                        this._acceleration = this._confVelocity / this._confAccelerationTime;
                         this._wheelState = WheelState.AccelerateRunning;
                     }
                     break;
@@ -117,8 +118,16 @@ namespace Wheel.Scripts {
                 case WheelState.SpinNormalRunning:
                     {
                         this._runningTime += dt;
-                        if (this._runningTime >= this._confT2) {
-                            console.log("preparing to deccelerate, step angle: " + this._d0 * (180.0 / Math.PI));
+
+                        let thetaInitial = (this._stopAtAngle - this._confStopDistance) % this.TWO_PI;
+                        if (thetaInitial < 0) thetaInitial += this.TWO_PI;
+
+                        let nextAngle = (this._angle + this._d0) % this.TWO_PI;
+                        if (this._runningTime >= this._confConstantVelocityTime &&
+                            nextAngle > thetaInitial &&
+                            this._angle <= thetaInitial) {
+                            console.log("preparing to deccelerate from angle: " + this._angle);
+                            this._displacementToStop = this._confStopDistance;
                             this._acceleration = 0.0;
                             this._wheelState = WheelState.DeccelerateStart;
                         }
@@ -128,11 +137,6 @@ namespace Wheel.Scripts {
                     {
                         this._runningTime = 0.0;
                         this._displacement = 0.0;
-
-                        let d0 = (this._stopAtAngle - this._angle);
-                        if (d0 < 0) d0 = this.TWO_PI + d0;
-
-                        this._displacementToStop = d0 + this.TWO_PI;
 
                         console.info("displacement to stop: " + this._displacementToStop);
                         this._acceleration = -(this._velocity * this._velocity) / (2.0 * this._displacementToStop);
@@ -145,26 +149,38 @@ namespace Wheel.Scripts {
                         this._runningTime += dt;
                         this._displacement += (this._d0);
 
-                        if (this._displacement + this._d0 >= this._displacementToStop) {
-                            // + this._d0 because we want to be below target angle, not over.
-                            // this way, we can just translate to the correct angle without changing
-                            // spin direction. Doing so would cause a visual artifact.
+                        let next = this._displacement + (this._velocity * dt) + (0.5 * this._acceleration * dt * dt);
+                        if (next >= this._displacementToStop) {
+                            // if on the next frame we are going to be on target or a bit over.
+                            // we just want to make sure we translate by a delta amount that lands us
+                            // in the correct place. 
                             this._acceleration = 0.0;
                             this._velocity = 0.0;
                             this._wheelState = WheelState.StopStart;
-                        }
+                        }                        
                     }
                     break;
                 case WheelState.StopStart:
-                    {
-                        let delta0 = (this._stopAtAngle - this._angle) * (180.0 / Math.PI);
-                        console.info("*Stopped at rad: " + this._stopAtAngle + ", actual rad: " + this._angle + " delta deg: " + delta0 + " stopping time: " + this._runningTime);
+                    {                        
+                        console.log("<<");
+                        console.log("Stopped at angle: " + this._angle);
+                        console.log("Desired stop: " + this._stopAtAngle);
+                        console.log("Running time: " + this._runningTime);
 
-                        if (Math.abs(delta0) > 2.0) {
-                            console.info("Sim landed " + ((delta0 < 0) ? "past" : "below") + " target");
+                        let delta0 = this.toDeg(this._stopAtAngle - this._angle);
+                        if (delta0 > 0) {
+                            console.info("Sim landed before target");
+                        } else if (delta0 < 0) {
+                            console.info("Sim landed after target");
                         } else {
-                            console.info("Sim landed within threshold");
+                            console.info("Sim landed ON target");
                         }
+
+                        if (delta0 <= 2.0) {
+                            console.info("Sim landed within threshold");
+                        } else {
+                            console.info("Sim landed outside threshold");
+                        } 
 
                         this._runningTime = 0.0;
                         this._wheelState = WheelState.StopRunning;
@@ -173,22 +189,21 @@ namespace Wheel.Scripts {
                 case WheelState.StopRunning:
                     {
                         this._runningTime += dt;
-                        
-                        // we can just gradually translate to any remaining distance now
-                        this._velocity = dt;
-                        this._angle += dt;
-                        // we are done when we have gone past the landing angle
-                        if (this._angle > this._stopAtAngle) {
-                            this._velocity = 0.0;
-                            this._angle = this._stopAtAngle;
-                            this._wheelState = WheelState.Idle;
-                            this._isRunning = false;
-                        }
+
+                        this._acceleration = 0.0;
+                        this._velocity = 0.0;
+                        this._angle = this._stopAtAngle;
+                        this._wheelState = WheelState.Idle;
+                        this._isRunning = false;
                     }
                     break;
             }
         }
 
+        private toDeg(rad: number): number {
+
+            return rad * 180.0 / Math.PI;
+        }
     }
 
 }
